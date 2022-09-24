@@ -1,0 +1,9 @@
+[package]
+name = "qiwi"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nom = "7"
+num-bigint = "0.4"
+clap = { version = "3.0", features = ["derive"] }
