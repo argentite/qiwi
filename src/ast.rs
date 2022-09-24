@@ -30,6 +30,7 @@ impl Expression for IntExpr {}
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarExpr<'a> {
     pub ident: &'a str,
+    pub index: Option<u32>,
 }
 
 impl Expression for VarExpr<'_> {}

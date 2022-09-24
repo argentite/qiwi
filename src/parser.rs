@@ -16,6 +16,7 @@ use num_bigint::{BigInt, ParseBigIntError};
 pub enum QiwiError<I> {
     UnknownType,
     ParseInt,
+    IndexError,
     GenericNom(I, nom::error::ErrorKind),
 }
 
@@ -133,9 +134,28 @@ pub fn expression_int(input: &str) -> IResult<&str, ast::IntExpr, QiwiError<&str
     Ok((input, ast::IntExpr { value }))
 }
 
-pub fn expression_var(input: &str) -> IResult<&str, ast::VarExpr, QiwiError<&str>> {
+// index is optional
+pub fn expression_indexed_var(input: &str) -> IResult<&str, ast::VarExpr, QiwiError<&str>> {
+    use std::str::FromStr;
+
     let (input, name) = symbol(input)?;
-    Ok((input, ast::VarExpr { ident: name }))
+    match delimited(tag("["), map_res(digit1, u32::from_str), tag("]"))(input) {
+        Ok((input, index)) => Ok((
+            input,
+            ast::VarExpr {
+                ident: name,
+                index: Some(index),
+            },
+        )),
+        Err(nom::Err::Error(QiwiError::ParseInt)) => Err(nom::Err::Error(QiwiError::IndexError)),
+        Err(_) => Ok((
+            input,
+            ast::VarExpr {
+                ident: name,
+                index: None,
+            },
+        )),
+    }
 }
 
 pub fn expression_paren(input: &str) -> IResult<&str, ast::Expr, QiwiError<&str>> {
@@ -165,7 +185,7 @@ pub fn expression_unary(input: &str) -> IResult<&str, ast::Expr, QiwiError<&str>
     alt((
         map(expression_paren, |x| x),
         map(expression_function_call, ast::Expr::Func),
-        map(expression_var, ast::Expr::Var),
+        map(expression_indexed_var, ast::Expr::Var),
         map(expression_int, ast::Expr::Int),
     ))(input)
 }
@@ -199,10 +219,17 @@ pub fn expression(input: &str) -> IResult<&str, ast::Expr, QiwiError<&str>> {
 pub fn assignment(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
     let (input, lhs, lhs_type) = if let Ok((input, lhs)) = typed_symbol(input) {
         // declaration & initialization
-        (input, ast::VarExpr { ident: lhs.name }, Some(lhs._type))
+        (
+            input,
+            ast::VarExpr {
+                ident: lhs.name,
+                index: None,
+            },
+            Some(lhs._type),
+        )
     } else {
         // assignment
-        let (input, lhs) = expression_var(input)?;
+        let (input, lhs) = expression_indexed_var(input)?;
         (input, lhs, None)
     };
 
@@ -330,7 +357,24 @@ mod tests {
     fn expression_unary() {
         assert_eq!(
             super::expression("abc"),
-            Ok(("", ast::Expr::Var(ast::VarExpr { ident: "abc" })))
+            Ok((
+                "",
+                ast::Expr::Var(ast::VarExpr {
+                    ident: "abc",
+                    index: None
+                })
+            ))
+        );
+
+        assert_eq!(
+            super::expression("abc[42]"),
+            Ok((
+                "",
+                ast::Expr::Var(ast::VarExpr {
+                    ident: "abc",
+                    index: Some(42)
+                })
+            ))
         );
 
         assert_eq!(
@@ -364,7 +408,10 @@ mod tests {
                     "",
                     ast::Expr::Binary(ast::BinaryExpr {
                         op: '-',
-                        lhs: Box::new(ast::Expr::Var(ast::VarExpr { ident: "abc" })),
+                        lhs: Box::new(ast::Expr::Var(ast::VarExpr {
+                            ident: "abc",
+                            index: None
+                        })),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from_str("42").unwrap()
                         })),
@@ -383,7 +430,10 @@ mod tests {
                     "",
                     ast::Expr::Binary(ast::BinaryExpr {
                         op: '+',
-                        lhs: Box::new(ast::Expr::Var(ast::VarExpr { ident: "abc" })),
+                        lhs: Box::new(ast::Expr::Var(ast::VarExpr {
+                            ident: "abc",
+                            index: None
+                        })),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from_str("42").unwrap()
                         })),
@@ -415,7 +465,10 @@ mod tests {
                     "",
                     ast::Expr::Func(ast::FuncExpr {
                         ident: "abc",
-                        args: vec![ast::Expr::Var(ast::VarExpr { ident: "xyz" })],
+                        args: vec![ast::Expr::Var(ast::VarExpr {
+                            ident: "xyz",
+                            index: None
+                        })],
                     })
                 ))
             );
@@ -434,7 +487,10 @@ mod tests {
                     ast::Expr::Func(ast::FuncExpr {
                         ident: "abc",
                         args: vec![
-                            ast::Expr::Var(ast::VarExpr { ident: "xyz" }),
+                            ast::Expr::Var(ast::VarExpr {
+                                ident: "xyz",
+                                index: None
+                            }),
                             ast::Expr::Int(ast::IntExpr {
                                 value: BigInt::from(42)
                             }),
@@ -453,7 +509,10 @@ mod tests {
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
-                        lhs: Box::new(ast::VarExpr { ident: "x" }),
+                        lhs: Box::new(ast::VarExpr {
+                            ident: "x",
+                            index: None
+                        }),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from_str("42").unwrap()
                         })),
@@ -468,7 +527,10 @@ mod tests {
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
-                        lhs: Box::new(ast::VarExpr { ident: "x" }),
+                        lhs: Box::new(ast::VarExpr {
+                            ident: "x",
+                            index: None
+                        }),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from_str("42").unwrap()
                         })),
@@ -487,7 +549,10 @@ mod tests {
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
-                        lhs: Box::new(ast::VarExpr { ident: "x" }),
+                        lhs: Box::new(ast::VarExpr {
+                            ident: "x",
+                            index: None
+                        }),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from(42)
                         })),
@@ -506,7 +571,10 @@ mod tests {
                 "",
                 ast::Block {
                     stmts: vec![],
-                    result: ast::Expr::Var(ast::VarExpr { ident: "x" }),
+                    result: ast::Expr::Var(ast::VarExpr {
+                        ident: "x",
+                        index: None
+                    }),
                 }
             ))
         );
@@ -518,13 +586,19 @@ mod tests {
                     "",
                     ast::Block {
                         stmts: vec![ast::Stmt::Assign(ast::AssignmentStmt {
-                            lhs: Box::new(ast::VarExpr { ident: "x" }),
+                            lhs: Box::new(ast::VarExpr {
+                                ident: "x",
+                                index: None
+                            }),
                             rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                                 value: BigInt::from_str("42").unwrap()
                             })),
                             lhs_type: None,
                         })],
-                        result: ast::Expr::Var(ast::VarExpr { ident: "x" }),
+                        result: ast::Expr::Var(ast::VarExpr {
+                            ident: "x",
+                            index: None
+                        }),
                     }
                 ))
             );
@@ -538,19 +612,31 @@ mod tests {
                     ast::Block {
                         stmts: vec![
                             ast::Stmt::Assign(ast::AssignmentStmt {
-                                lhs: Box::new(ast::VarExpr { ident: "x" }),
+                                lhs: Box::new(ast::VarExpr {
+                                    ident: "x",
+                                    index: None
+                                }),
                                 rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                                     value: BigInt::from_str("42").unwrap()
                                 })),
                                 lhs_type: None,
                             }),
                             ast::Stmt::Assign(ast::AssignmentStmt {
-                                lhs: Box::new(ast::VarExpr { ident: "y" }),
-                                rhs: Box::new(ast::Expr::Var(ast::VarExpr { ident: "x" })),
+                                lhs: Box::new(ast::VarExpr {
+                                    ident: "y",
+                                    index: None
+                                }),
+                                rhs: Box::new(ast::Expr::Var(ast::VarExpr {
+                                    ident: "x",
+                                    index: None
+                                })),
                                 lhs_type: None,
                             })
                         ],
-                        result: ast::Expr::Var(ast::VarExpr { ident: "y" }),
+                        result: ast::Expr::Var(ast::VarExpr {
+                            ident: "y",
+                            index: None
+                        }),
                     }
                 ))
             );
@@ -656,8 +742,14 @@ mod tests {
                         stmts: vec![],
                         result: ast::Expr::Binary(ast::BinaryExpr {
                             op: '+',
-                            lhs: Box::new(ast::Expr::Var(ast::VarExpr { ident: "a" })),
-                            rhs: Box::new(ast::Expr::Var(ast::VarExpr { ident: "b" }))
+                            lhs: Box::new(ast::Expr::Var(ast::VarExpr {
+                                ident: "a",
+                                index: None
+                            })),
+                            rhs: Box::new(ast::Expr::Var(ast::VarExpr {
+                                ident: "b",
+                                index: None
+                            }))
                         })
                     }
                 })
