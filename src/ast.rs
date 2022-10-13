@@ -85,7 +85,7 @@ pub struct Block<'a> {
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDef<'a> {
     pub name: &'a str,
-    pub args: Vec<TypedSymbol<'a>>,
+    pub param: Vec<TypedSymbol<'a>>,
     pub body: Block<'a>,
 }
 

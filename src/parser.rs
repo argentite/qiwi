@@ -287,7 +287,14 @@ pub fn function_def(input: &str) -> IResult<&str, ast::Def, QiwiError<&str>> {
     let (input, _) = spacing(input)?;
     let (input, body) = block(input)?;
 
-    Ok((input, ast::Def::Func(ast::FunctionDef { name, args, body })))
+    Ok((
+        input,
+        ast::Def::Func(ast::FunctionDef {
+            name,
+            param: args,
+            body,
+        }),
+    ))
 }
 
 pub fn parse_source(input: &str) -> Result<Vec<ast::Def>, QiwiError<&str>> {
@@ -687,7 +694,7 @@ mod tests {
                 "",
                 ast::Def::Func(ast::FunctionDef {
                     name: "one",
-                    args: vec![],
+                    param: vec![],
                     body: ast::Block {
                         stmts: vec![],
                         result: ast::Expr::Int(ast::IntExpr {
@@ -703,7 +710,7 @@ mod tests {
                 "",
                 ast::Def::Func(ast::FunctionDef {
                     name: "aes256",
-                    args: vec![
+                    param: vec![
                         ast::TypedSymbol {
                             name: "data",
                             _type: ast::Type::Q(128)
@@ -728,7 +735,7 @@ mod tests {
                 "",
                 ast::Def::Func(ast::FunctionDef {
                     name: "add",
-                    args: vec![
+                    param: vec![
                         ast::TypedSymbol {
                             name: "a",
                             _type: ast::Type::N
