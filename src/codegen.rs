@@ -74,6 +74,25 @@ impl CompileExpr for ast::VarExpr<'_> {
     }
 }
 
+impl CompileExpr for ast::BinaryExpr<'_> {
+    fn compile(&self, symbol_table: &mut SymbolTable) -> Result<Rc<Node>, String> {
+        let function_name = match self.op {
+            '+' => "_add",
+            '-' => "_sub",
+            _ => return Err(format!("Unknown operator: {}", self.op)),
+        };
+
+        let lhs = self.lhs.compile(symbol_table)?;
+        let rhs = self.rhs.compile(symbol_table)?;
+
+        // This is implemented through builtin function calls
+        Ok(Rc::new(Node::FuncCall(
+            function_name.to_string(),
+            vec![lhs, rhs],
+        )))
+    }
+}
+
 impl CompileExpr for ast::FuncExpr<'_> {
     fn compile(&self, symbol_table: &mut SymbolTable) -> Result<Rc<Node>, String> {
         let arg_nodes = self
@@ -91,7 +110,7 @@ impl CompileExpr for ast::Expr<'_> {
         match self {
             ast::Expr::Int(e) => e.compile(symbol_table),
             ast::Expr::Var(e) => e.compile(symbol_table),
-            ast::Expr::Binary(_) => todo!(),
+            ast::Expr::Binary(e) => e.compile(symbol_table),
             ast::Expr::Func(e) => e.compile(symbol_table),
         }
     }
