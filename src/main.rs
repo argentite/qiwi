@@ -1,5 +1,5 @@
 mod ast;
-mod codegen;
+mod ir;
 mod parser;
 
 #[derive(clap::Parser, Debug)]
@@ -37,7 +37,7 @@ fn main() {
         println!("{:?}", ast);
     }
 
-    use crate::codegen::{CompileStatement, SymbolTable};
+    use crate::ir::{CompileStatement, SymbolTable};
     let mut global_function_table = SymbolTable::new();
     for def in ast {
         match def.compile(&mut global_function_table) {
