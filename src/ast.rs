@@ -18,6 +18,13 @@ pub struct TypedSymbol<'a> {
     pub _type: Type,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct TypedParameter<'a> {
+    pub name: &'a str,
+    pub _type: Type,
+    pub persist: bool,
+}
+
 pub trait Expression: std::fmt::Debug + Eq {}
 
 #[derive(Debug, PartialEq, Eq)]
@@ -85,7 +92,7 @@ pub struct Block<'a> {
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDef<'a> {
     pub name: &'a str,
-    pub param: Vec<TypedSymbol<'a>>,
+    pub param: Vec<TypedParameter<'a>>,
     pub body: Block<'a>,
 }
 

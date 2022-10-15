@@ -88,45 +88,34 @@ pub fn symbol(input: &str) -> IResult<&str, &str, QiwiError<&str>> {
     ))(input)
 }
 
+pub fn _type(input: &str) -> IResult<&str, ast::Type, QiwiError<&str>> {
+    let (input, typename) = anychar(input)?;
+
+    if typename == 'C' {
+        Ok((input, ast::Type::C))
+    } else if typename == 'N' {
+        Ok((input, ast::Type::N))
+    } else if typename == 'Q' {
+        use std::str::FromStr;
+        let (input, len) = map_res(digit1, u32::from_str)(input)?;
+        Ok((input, ast::Type::Q(len)))
+    } else {
+        Err(nom::Err::Error(QiwiError::UnknownType))
+    }
+}
+
 pub fn typed_symbol(input: &str) -> IResult<&str, ast::TypedSymbol, QiwiError<&str>> {
     let (input, name) = recognize(pair(
         alt((alpha1, tag("_"))),
         many0_count(alt((alphanumeric1, tag("_")))),
     ))(input)?;
+
     let (input, _) = spacing(input)?;
     let (input, _) = tag(":")(input)?;
     let (input, _) = spacing(input)?;
-    let (input, typename) = anychar(input)?;
+    let (input, _type) = _type(input)?;
 
-    if typename == 'C' {
-        Ok((
-            input,
-            ast::TypedSymbol {
-                name,
-                _type: ast::Type::C,
-            },
-        ))
-    } else if typename == 'N' {
-        Ok((
-            input,
-            ast::TypedSymbol {
-                name,
-                _type: ast::Type::N,
-            },
-        ))
-    } else if typename == 'Q' {
-        use std::str::FromStr;
-        let (input, len) = map_res(digit1, u32::from_str)(input)?;
-        Ok((
-            input,
-            ast::TypedSymbol {
-                name,
-                _type: ast::Type::Q(len),
-            },
-        ))
-    } else {
-        Err(nom::Err::Error(QiwiError::UnknownType))
-    }
+    Ok((input, ast::TypedSymbol { name, _type }))
 }
 
 pub fn expression_int(input: &str) -> IResult<&str, ast::IntExpr, QiwiError<&str>> {
@@ -272,6 +261,39 @@ pub fn block(input: &str) -> IResult<&str, ast::Block, QiwiError<&str>> {
     ))
 }
 
+pub fn function_parameter(input: &str) -> IResult<&str, ast::TypedParameter, QiwiError<&str>> {
+    let (input, name) = recognize(pair(
+        alt((alpha1, tag("_"))),
+        many0_count(alt((alphanumeric1, tag("_")))),
+    ))(input)?;
+    let (input, _) = spacing(input)?;
+    let (input, _) = tag(":")(input)?;
+    let (input, _) = spacing(input)?;
+
+    if let Ok((input, _)) = tag::<_, _, QiwiError<&str>>("persist")(input) {
+        let (input, _) = spacing(input)?;
+        let (input, _type) = _type(input)?;
+        Ok((
+            input,
+            ast::TypedParameter {
+                name,
+                _type,
+                persist: true,
+            },
+        ))
+    } else {
+        let (input, _type) = _type(input)?;
+        Ok((
+            input,
+            ast::TypedParameter {
+                name,
+                _type,
+                persist: false,
+            },
+        ))
+    }
+}
+
 pub fn function_def(input: &str) -> IResult<&str, ast::Def, QiwiError<&str>> {
     let (input, _) = tag("fn")(input)?;
     let (input, _) = spacing(input)?;
@@ -280,7 +302,7 @@ pub fn function_def(input: &str) -> IResult<&str, ast::Def, QiwiError<&str>> {
     let (input, _) = tag("(")(input)?;
     let (input, args) = delimited(
         spacing,
-        separated_list0(delimited(spacing, tag(","), spacing), typed_symbol),
+        separated_list0(delimited(spacing, tag(","), spacing), function_parameter),
         spacing,
     )(input)?;
     let (input, _) = tag(")")(input)?;
@@ -711,13 +733,15 @@ mod tests {
                 ast::Def::Func(ast::FunctionDef {
                     name: "aes256",
                     param: vec![
-                        ast::TypedSymbol {
+                        ast::TypedParameter {
                             name: "data",
-                            _type: ast::Type::Q(128)
+                            _type: ast::Type::Q(128),
+                            persist: false
                         },
-                        ast::TypedSymbol {
+                        ast::TypedParameter {
                             name: "key",
-                            _type: ast::Type::Q(128)
+                            _type: ast::Type::Q(128),
+                            persist: false
                         }
                     ],
                     body: ast::Block {
@@ -730,19 +754,21 @@ mod tests {
             ))
         );
         assert_eq!(
-            super::function_def("fn add(a: N, b: N) { a + b }"),
+            super::function_def("fn add(a: N, b: persist N) { a + b }"),
             Ok((
                 "",
                 ast::Def::Func(ast::FunctionDef {
                     name: "add",
                     param: vec![
-                        ast::TypedSymbol {
+                        ast::TypedParameter {
                             name: "a",
-                            _type: ast::Type::N
+                            _type: ast::Type::N,
+                            persist: false
                         },
-                        ast::TypedSymbol {
+                        ast::TypedParameter {
                             name: "b",
-                            _type: ast::Type::N
+                            _type: ast::Type::N,
+                            persist: true
                         }
                     ],
                     body: ast::Block {
