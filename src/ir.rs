@@ -74,22 +74,34 @@ impl CompileExpr for ast::VarExpr<'_> {
     }
 }
 
+fn builtin_add(lhs: Rc<Node>, rhs: Rc<Node>) -> Result<Rc<Node>, String> {
+    if let (Node::Constant(a), Node::Constant(b)) = (&*lhs, &*rhs) {
+        Ok(Rc::new(Node::Constant(a + b)))
+    } else {
+        Ok(Rc::new(Node::FuncCall("_add".to_string(), vec![lhs, rhs])))
+    }
+}
+
+fn builtin_sub(lhs: Rc<Node>, rhs: Rc<Node>) -> Result<Rc<Node>, String> {
+    if let (Node::Constant(a), Node::Constant(b)) = (&*lhs, &*rhs) {
+        Ok(Rc::new(Node::Constant(a - b)))
+    } else {
+        Ok(Rc::new(Node::FuncCall("_sub".to_string(), vec![lhs, rhs])))
+    }
+}
+
 impl CompileExpr for ast::BinaryExpr<'_> {
     fn compile(&self, symbol_table: &mut SymbolTable) -> Result<Rc<Node>, String> {
-        let function_name = match self.op {
-            '+' => "_add",
-            '-' => "_sub",
-            _ => return Err(format!("Unknown operator: {}", self.op)),
-        };
-
         let lhs = self.lhs.compile(symbol_table)?;
         let rhs = self.rhs.compile(symbol_table)?;
 
-        // This is implemented through builtin function calls
-        Ok(Rc::new(Node::FuncCall(
-            function_name.to_string(),
-            vec![lhs, rhs],
-        )))
+        let function = match self.op {
+            '+' => builtin_add,
+            '-' => builtin_sub,
+            _ => return Err(format!("Unknown operator: {}", self.op)),
+        };
+
+        function(lhs, rhs)
     }
 }
 
@@ -198,7 +210,10 @@ impl CompileStatement for ast::Def<'_> {
 
 mod tests {
     use super::{Node, SymbolTable};
+    use crate::ast;
+    use crate::ir::CompileExpr;
     use num_bigint::BigInt;
+    use std::rc::Rc;
 
     #[test]
     fn symbol_table() {
@@ -223,6 +238,29 @@ mod tests {
         assert_eq!(
             child.lookup("def"),
             Some(Rc::new(Node::Constant(BigInt::from(34))))
+        );
+    }
+
+    #[test]
+    fn constant_folding() {
+        assert_eq!(
+            ast::BinaryExpr {
+                op: '+',
+                lhs: Box::new(ast::Expr::Binary(ast::BinaryExpr {
+                    op: '-',
+                    lhs: Box::new(ast::Expr::Int(ast::IntExpr {
+                        value: BigInt::from(50)
+                    })),
+                    rhs: Box::new(ast::Expr::Int(ast::IntExpr {
+                        value: BigInt::from(10)
+                    })),
+                })),
+                rhs: Box::new(ast::Expr::Int(ast::IntExpr {
+                    value: BigInt::from(2)
+                })),
+            }
+            .compile(&mut SymbolTable::new()),
+            Ok(Rc::new(Node::Constant(BigInt::from(42))))
         );
     }
 }
