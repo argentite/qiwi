@@ -4,9 +4,19 @@ use num_bigint::BigInt;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Type {
-    C,      // Classical integer
-    Q(u32), // Fixed sized quantum integer
-    N,      // Variable sized quantum integer
+    C,        // Classical integer
+    Q(usize), // Fixed sized quantum integer
+    N,        // Variable sized quantum integer
+}
+
+impl Type {
+    pub fn size(&self) -> Option<usize> {
+        match self {
+            Type::C => None,
+            Type::Q(n) => Some(*n),
+            Type::N => None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -39,7 +49,7 @@ impl Expression for IntExpr {}
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarExpr<'a> {
     pub ident: &'a str,
-    pub index: Option<u32>,
+    pub index: Option<usize>,
 }
 
 impl Expression for VarExpr<'_> {}

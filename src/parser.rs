@@ -99,7 +99,7 @@ pub fn _type(input: &str) -> IResult<&str, ast::Type, QiwiError<&str>> {
         Ok((input, ast::Type::N))
     } else if typename == 'Q' {
         use std::str::FromStr;
-        let (input, len) = map_res(digit1, u32::from_str)(input)?;
+        let (input, len) = map_res(digit1, usize::from_str)(input)?;
         Ok((input, ast::Type::Q(len)))
     } else {
         Err(nom::Err::Error(QiwiError::UnknownType))
@@ -130,7 +130,7 @@ pub fn expression_indexed_var(input: &str) -> IResult<&str, ast::VarExpr, QiwiEr
     use std::str::FromStr;
 
     let (input, name) = symbol(input)?;
-    match delimited(tag("["), map_res(digit1, u32::from_str), tag("]"))(input) {
+    match delimited(tag("["), map_res(digit1, usize::from_str), tag("]"))(input) {
         Ok((input, index)) => Ok((
             input,
             ast::VarExpr {
