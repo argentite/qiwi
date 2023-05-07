@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast;
 
 use nom::{
@@ -311,11 +313,11 @@ pub fn function_def(input: &str) -> IResult<&str, ast::Def, QiwiError<&str>> {
 
     Ok((
         input,
-        ast::Def::Func(ast::FunctionDef {
+        ast::Def::Func(Rc::new(ast::FunctionDef {
             name,
             param: args,
             body,
-        }),
+        })),
     ))
 }
 
@@ -342,7 +344,7 @@ pub fn parse_source(input: &str) -> Result<Vec<ast::Def>, QiwiError<&str>> {
 mod tests {
     use crate::ast;
     use num_bigint::BigInt;
-    use std::str::FromStr;
+    use std::{rc::Rc, str::FromStr};
 
     #[test]
     fn space() {
@@ -714,7 +716,7 @@ mod tests {
             super::function_def("fn one() { 1 }"),
             Ok((
                 "",
-                ast::Def::Func(ast::FunctionDef {
+                ast::Def::Func(Rc::new(ast::FunctionDef {
                     name: "one",
                     param: vec![],
                     body: ast::Block {
@@ -723,14 +725,14 @@ mod tests {
                             value: BigInt::from(1)
                         })
                     }
-                })
+                }))
             ))
         );
         assert_eq!(
             super::function_def("fn aes256(data: Q128, key: Q128) { 1 }"),
             Ok((
                 "",
-                ast::Def::Func(ast::FunctionDef {
+                ast::Def::Func(Rc::new(ast::FunctionDef {
                     name: "aes256",
                     param: vec![
                         ast::TypedParameter {
@@ -750,14 +752,14 @@ mod tests {
                             value: BigInt::from(1)
                         })
                     }
-                })
+                }))
             ))
         );
         assert_eq!(
             super::function_def("fn add(a: N, b: persist N) { a + b }"),
             Ok((
                 "",
-                ast::Def::Func(ast::FunctionDef {
+                ast::Def::Func(Rc::new(ast::FunctionDef {
                     name: "add",
                     param: vec![
                         ast::TypedParameter {
@@ -785,7 +787,7 @@ mod tests {
                             }))
                         })
                     }
-                })
+                }))
             ))
         );
     }

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use num_bigint::BigInt;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -98,5 +100,5 @@ pub struct FunctionDef<'a> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Def<'a> {
-    Func(FunctionDef<'a>),
+    Func(Rc<FunctionDef<'a>>),
 }
