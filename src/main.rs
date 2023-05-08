@@ -1,6 +1,7 @@
 mod ast;
 mod ir;
 mod parser;
+mod qasm;
 
 #[derive(clap::Parser, Debug)]
 struct CommandLineArgs {
