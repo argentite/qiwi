@@ -344,9 +344,29 @@ impl CompileStatement for ast::AssignmentStmt<'_> {
 
 impl CompileStatement for ast::ForStmt<'_> {
     fn compile(&self, context: &mut Context, output: &mut dyn Output) -> Result<(), String> {
-        let count = match self.count.value.clone().try_into() {
-            Ok(x) => x,
-            Err(x) => return Err(format!("Failed to convert loop iteration count: {}", x)),
+        let count = match &self.count {
+            ast::ConstExpr::Int(x) => match x.value.clone().try_into() {
+                Ok(x) => x,
+                Err(x) => return Err(format!("Failed to convert loop iteration count: {}", x)),
+            },
+            ast::ConstExpr::Var(var) => match context.get_comptime_variable(var.ident) {
+                Some(var) => var,
+                None => {
+                    return Err(format!(
+                        "Unknown compile time variable in loop iteration: {}",
+                        var.ident
+                    ))
+                }
+            },
+            ast::ConstExpr::Len(len) => match context.get_variable(len.variable.ident) {
+                Some(var) => var.len(),
+                None => {
+                    return Err(format!(
+                        "Length operator can only be applied on qubits, not {}",
+                        len.variable.ident
+                    ))
+                }
+            },
         };
         for i in 0..count {
             context.set_comptime_variable(self.variable.ident, i);

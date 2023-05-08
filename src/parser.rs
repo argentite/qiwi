@@ -205,6 +205,23 @@ pub fn expression(input: &str) -> IResult<&str, ast::Expr, QiwiError<&str>> {
     }
 }
 
+pub fn expression_len(input: &str) -> IResult<&str, ast::LenExpr, QiwiError<&str>> {
+    let (input, _) = tag("|")(input)?;
+    let (input, _) = spacing(input)?;
+    let (input, variable) = expression_indexed_var(input)?;
+    let (input, _) = spacing(input)?;
+    let (input, _) = tag("|")(input)?;
+    Ok((input, ast::LenExpr { variable }))
+}
+
+pub fn const_expression(input: &str) -> IResult<&str, ast::ConstExpr, QiwiError<&str>> {
+    alt((
+        map(expression_len, ast::ConstExpr::Len),
+        map(expression_int, ast::ConstExpr::Int),
+        map(expression_indexed_var, ast::ConstExpr::Var),
+    ))(input)
+}
+
 pub fn statement_assignment(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
     let (input, lhs, lhs_type) = if let Ok((input, lhs)) = typed_symbol(input) {
         // declaration & initialization
@@ -260,7 +277,7 @@ pub fn statement_for(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
     let (input, _) = tag("(")(input)?;
     let (input, variable) = delimited(spacing, symbol, spacing)(input)?;
     let (input, _) = tag(",")(input)?;
-    let (input, value) = delimited(spacing, expression_int, spacing)(input)?;
+    let (input, value) = delimited(spacing, const_expression, spacing)(input)?;
     let (input, _) = tag(")")(input)?;
     let (input, _) = spacing(input)?;
     let (input, body) = block(input)?;

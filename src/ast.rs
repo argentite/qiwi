@@ -92,6 +92,21 @@ pub struct FuncExpr<'a> {
 impl Expression for FuncExpr<'_> {}
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct LenExpr<'a> {
+    pub variable: VarExpr<'a>,
+}
+
+impl Expression for LenExpr<'_> {}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ConstExpr<'a> {
+    Int(IntExpr),
+    Var(VarExpr<'a>),
+    Len(LenExpr<'a>),
+}
+impl Expression for ConstExpr<'_> {}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expr<'a> {
     Int(IntExpr),
     Var(VarExpr<'a>),
@@ -113,7 +128,7 @@ impl Statement for AssignmentStmt<'_> {}
 #[derive(Debug, PartialEq, Eq)]
 pub struct ForStmt<'a> {
     pub variable: VarExpr<'a>,
-    pub count: IntExpr,
+    pub count: ConstExpr<'a>,
     pub body: Block<'a>,
 }
 
