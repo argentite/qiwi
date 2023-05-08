@@ -1,5 +1,8 @@
+#[macro_use]
+extern crate lazy_static;
+
 mod ast;
-mod ir;
+mod codegen;
 mod parser;
 mod qasm;
 
@@ -12,10 +15,6 @@ struct CommandLineArgs {
     /// Print the Abstract Syntax Tree
     #[clap(long)]
     dump_ast: bool,
-
-    /// Print the Intermediate Representation
-    #[clap(long)]
-    dump_ir: bool,
 }
 
 fn main() {
@@ -38,17 +37,13 @@ fn main() {
         println!("{:?}", ast);
     }
 
-    use crate::ir::{CompileStatement, SymbolTable};
-    let mut global_function_table = SymbolTable::new();
-    for def in ast {
-        match def.compile(&mut global_function_table) {
-            Ok(_) => {}
-            Err(error) => {
-                eprintln!("Error: {}", error);
-            }
+    let mut context = codegen::Context::new();
+    codegen::load_functions(&mut context, &ast);
+    let mut output = qasm::QasmWriter {};
+    match codegen::compile_function("main", &mut context, &mut output) {
+        Ok(_result) => {}
+        Err(error) => {
+            eprintln!("Error: {}", error);
         }
-    }
-    if args.dump_ir {
-        println!("{:?}", global_function_table);
     }
 }
