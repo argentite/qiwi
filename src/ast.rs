@@ -55,6 +55,26 @@ pub struct VarExpr<'a> {
 impl Expression for VarExpr<'_> {}
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct TupleExpr<'a> {
+    pub elements: Vec<Expr<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TupleLhsExpr<'a> {
+    pub elements: Vec<VarExpr<'a>>,
+}
+
+impl Expression for TupleExpr<'_> {}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum LhsExpr<'a> {
+    Single(VarExpr<'a>),
+    Tuple(TupleLhsExpr<'a>),
+}
+
+impl Expression for LhsExpr<'_> {}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct BinaryExpr<'a> {
     pub op: char,
     pub lhs: Box<Expr<'a>>,
@@ -83,7 +103,7 @@ pub trait Statement: std::fmt::Debug + Eq {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct AssignmentStmt<'a> {
-    pub lhs: Box<VarExpr<'a>>,
+    pub lhs: Box<LhsExpr<'a>>,
     pub rhs: Box<Expr<'a>>,
     pub lhs_type: Option<Type>,
 }

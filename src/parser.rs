@@ -212,16 +212,32 @@ pub fn assignment(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
         // declaration & initialization
         (
             input,
-            ast::VarExpr {
+            ast::LhsExpr::Single(ast::VarExpr {
                 ident: lhs.name,
                 index: None,
-            },
+            }),
             Some(lhs._type),
         )
-    } else {
+    } else if let Ok((input, lhs)) = expression_indexed_var(input) {
         // assignment
-        let (input, lhs) = expression_indexed_var(input)?;
-        (input, lhs, None)
+        (input, ast::LhsExpr::Single(lhs), None)
+    } else {
+        let (input, _) = tag("(")(input)?;
+        let (input, elements) = delimited(
+            spacing,
+            separated_list0(
+                delimited(spacing, tag(","), spacing),
+                expression_indexed_var,
+            ),
+            spacing,
+        )(input)?;
+        let (input, _) = tag(")")(input)?;
+
+        (
+            input,
+            ast::LhsExpr::Tuple(ast::TupleLhsExpr { elements }),
+            None,
+        )
     };
 
     let (input, _) = spacing(input)?;
@@ -540,10 +556,10 @@ mod tests {
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
-                        lhs: Box::new(ast::VarExpr {
+                        lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
                             ident: "x",
                             index: None
-                        }),
+                        })),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from_str("42").unwrap()
                         })),
@@ -558,14 +574,40 @@ mod tests {
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
-                        lhs: Box::new(ast::VarExpr {
+                        lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
                             ident: "x",
                             index: None
-                        }),
+                        })),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from_str("42").unwrap()
                         })),
                         lhs_type: Some(ast::Type::Q(6)),
+                    })
+                ))
+            );
+        }
+        for s in ["(x,y) = 42", "(x, y) = 42", "( x ,y ) = 42", "(x , y)= 42"] {
+            assert_eq!(
+                super::assignment(s),
+                Ok((
+                    "",
+                    ast::Stmt::Assign(ast::AssignmentStmt {
+                        lhs: Box::new(ast::LhsExpr::Tuple(ast::TupleLhsExpr {
+                            elements: vec![
+                                ast::VarExpr {
+                                    ident: "x",
+                                    index: None
+                                },
+                                ast::VarExpr {
+                                    ident: "y",
+                                    index: None
+                                }
+                            ]
+                        })),
+                        rhs: Box::new(ast::Expr::Int(ast::IntExpr {
+                            value: BigInt::from_str("42").unwrap()
+                        })),
+                        lhs_type: None,
                     })
                 ))
             );
@@ -580,10 +622,10 @@ mod tests {
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
-                        lhs: Box::new(ast::VarExpr {
+                        lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
                             ident: "x",
                             index: None
-                        }),
+                        })),
                         rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from(42)
                         })),
@@ -617,10 +659,10 @@ mod tests {
                     "",
                     ast::Block {
                         stmts: vec![ast::Stmt::Assign(ast::AssignmentStmt {
-                            lhs: Box::new(ast::VarExpr {
+                            lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
                                 ident: "x",
                                 index: None
-                            }),
+                            })),
                             rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                                 value: BigInt::from_str("42").unwrap()
                             })),
@@ -643,20 +685,20 @@ mod tests {
                     ast::Block {
                         stmts: vec![
                             ast::Stmt::Assign(ast::AssignmentStmt {
-                                lhs: Box::new(ast::VarExpr {
+                                lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
                                     ident: "x",
                                     index: None
-                                }),
+                                })),
                                 rhs: Box::new(ast::Expr::Int(ast::IntExpr {
                                     value: BigInt::from_str("42").unwrap()
                                 })),
                                 lhs_type: None,
                             }),
                             ast::Stmt::Assign(ast::AssignmentStmt {
-                                lhs: Box::new(ast::VarExpr {
+                                lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
                                     ident: "y",
                                     index: None
-                                }),
+                                })),
                                 rhs: Box::new(ast::Expr::Var(ast::VarExpr {
                                     ident: "x",
                                     index: None
