@@ -127,15 +127,13 @@ pub fn expression_int(input: &str) -> IResult<&str, ast::IntExpr, QiwiError<&str
 
 // index is optional
 pub fn expression_indexed_var(input: &str) -> IResult<&str, ast::VarExpr, QiwiError<&str>> {
-    use std::str::FromStr;
-
     let (input, name) = symbol(input)?;
-    match delimited(tag("["), map_res(digit1, usize::from_str), tag("]"))(input) {
+    match delimited(tag("["), expression, tag("]"))(input) {
         Ok((input, index)) => Ok((
             input,
             ast::VarExpr {
                 ident: name,
-                index: Some(index),
+                index: Some(Rc::new(index)),
             },
         )),
         Err(nom::Err::Error(QiwiError::ParseInt)) => Err(nom::Err::Error(QiwiError::IndexError)),
@@ -207,7 +205,7 @@ pub fn expression(input: &str) -> IResult<&str, ast::Expr, QiwiError<&str>> {
     }
 }
 
-pub fn assignment(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
+pub fn statement_assignment(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
     let (input, lhs, lhs_type) = if let Ok((input, lhs)) = typed_symbol(input) {
         // declaration & initialization
         (
@@ -256,11 +254,48 @@ pub fn assignment(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
     ))
 }
 
+pub fn statement_for(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
+    let (input, _) = tag("for")(input)?;
+    let (input, _) = spacing(input)?;
+    let (input, _) = tag("(")(input)?;
+    let (input, variable) = delimited(spacing, symbol, spacing)(input)?;
+    let (input, _) = tag(",")(input)?;
+    let (input, value) = delimited(spacing, expression_int, spacing)(input)?;
+    let (input, _) = tag(")")(input)?;
+    let (input, _) = spacing(input)?;
+    let (input, body) = block(input)?;
+
+    Ok((
+        input,
+        ast::Stmt::For(ast::ForStmt {
+            variable: ast::VarExpr {
+                ident: variable,
+                index: None,
+            },
+            count: value,
+            body,
+        }),
+    ))
+}
+
 pub fn statement(input: &str) -> IResult<&str, ast::Stmt, QiwiError<&str>> {
-    terminated(assignment, delimited(spacing, tag(";"), spacing))(input)
+    terminated(
+        alt((statement_assignment, statement_for)),
+        delimited(spacing, tag(";"), spacing),
+    )(input)
 }
 
 pub fn block(input: &str) -> IResult<&str, ast::Block, QiwiError<&str>> {
+    let (input, _) = tag("{")(input)?;
+    let (input, _) = spacing(input)?;
+    let (input, body) = many0(statement)(input)?;
+
+    let (input, _) = tag("}")(input)?;
+
+    Ok((input, ast::Block { stmts: body }))
+}
+
+pub fn expression_block(input: &str) -> IResult<&str, ast::BlockExpr, QiwiError<&str>> {
     let (input, _) = tag("{")(input)?;
     let (input, _) = spacing(input)?;
     let (input, body) = many0(statement)(input)?;
@@ -272,7 +307,7 @@ pub fn block(input: &str) -> IResult<&str, ast::Block, QiwiError<&str>> {
 
     Ok((
         input,
-        ast::Block {
+        ast::BlockExpr {
             stmts: body,
             result,
         },
@@ -325,7 +360,7 @@ pub fn function_def(input: &str) -> IResult<&str, ast::Def, QiwiError<&str>> {
     )(input)?;
     let (input, _) = tag(")")(input)?;
     let (input, _) = spacing(input)?;
-    let (input, body) = block(input)?;
+    let (input, body) = expression_block(input)?;
 
     Ok((
         input,
@@ -552,7 +587,7 @@ mod tests {
     fn statement_assignment() {
         for s in ["x = 42", "x=42", "x =42", "x= 42"] {
             assert_eq!(
-                super::assignment(s),
+                super::statement_assignment(s),
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
@@ -570,7 +605,7 @@ mod tests {
         }
         for s in ["x : Q6 = 42", "x: Q6 = 42", "x :Q6 = 42", "x : Q6= 42"] {
             assert_eq!(
-                super::assignment(s),
+                super::statement_assignment(s),
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
@@ -588,7 +623,7 @@ mod tests {
         }
         for s in ["(x,y) = 42", "(x, y) = 42", "( x ,y ) = 42", "(x , y)= 42"] {
             assert_eq!(
-                super::assignment(s),
+                super::statement_assignment(s),
                 Ok((
                     "",
                     ast::Stmt::Assign(ast::AssignmentStmt {
@@ -637,12 +672,45 @@ mod tests {
     }
 
     #[test]
+    fn statement_for() {
+        for s in ["for ( i , 42 ) { x = 42; }", "for(i,42){ x = 42; }"] {
+            assert_eq!(
+                super::statement_for(s),
+                Ok((
+                    "",
+                    ast::Stmt::For(ast::ForStmt {
+                        variable: ast::VarExpr {
+                            ident: "i",
+                            index: None
+                        },
+                        count: ast::IntExpr {
+                            value: BigInt::from(42)
+                        },
+                        body: ast::Block {
+                            stmts: vec![ast::Stmt::Assign(ast::AssignmentStmt {
+                                lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
+                                    ident: "x",
+                                    index: None
+                                })),
+                                rhs: Box::new(ast::Expr::Int(ast::IntExpr {
+                                    value: BigInt::from(42)
+                                })),
+                                lhs_type: None,
+                            })]
+                        }
+                    })
+                ))
+            );
+        }
+    }
+
+    #[test]
     fn block() {
         assert_eq!(
-            super::block("{ x }"),
+            super::expression_block("{ x }"),
             Ok((
                 "",
-                ast::Block {
+                ast::BlockExpr {
                     stmts: vec![],
                     result: ast::Expr::Var(ast::VarExpr {
                         ident: "x",
@@ -654,10 +722,10 @@ mod tests {
 
         for s in ["{x = 42; x}", "{ x = 42 ; x }"] {
             assert_eq!(
-                super::block(s),
+                super::expression_block(s),
                 Ok((
                     "",
-                    ast::Block {
+                    ast::BlockExpr {
                         stmts: vec![ast::Stmt::Assign(ast::AssignmentStmt {
                             lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
                                 ident: "x",
@@ -677,7 +745,66 @@ mod tests {
             );
         }
 
+        for s in ["{x = 42; }", "{ x = 42 ;}"] {
+            assert_eq!(
+                super::block(s),
+                Ok((
+                    "",
+                    ast::Block {
+                        stmts: vec![ast::Stmt::Assign(ast::AssignmentStmt {
+                            lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
+                                ident: "x",
+                                index: None
+                            })),
+                            rhs: Box::new(ast::Expr::Int(ast::IntExpr {
+                                value: BigInt::from_str("42").unwrap()
+                            })),
+                            lhs_type: None,
+                        })],
+                    }
+                ))
+            );
+        }
+
         for s in ["{x = 42; y = x; y}", "{ x = 42 ; y = x; y }"] {
+            assert_eq!(
+                super::expression_block(s),
+                Ok((
+                    "",
+                    ast::BlockExpr {
+                        stmts: vec![
+                            ast::Stmt::Assign(ast::AssignmentStmt {
+                                lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
+                                    ident: "x",
+                                    index: None
+                                })),
+                                rhs: Box::new(ast::Expr::Int(ast::IntExpr {
+                                    value: BigInt::from_str("42").unwrap()
+                                })),
+                                lhs_type: None,
+                            }),
+                            ast::Stmt::Assign(ast::AssignmentStmt {
+                                lhs: Box::new(ast::LhsExpr::Single(ast::VarExpr {
+                                    ident: "y",
+                                    index: None
+                                })),
+                                rhs: Box::new(ast::Expr::Var(ast::VarExpr {
+                                    ident: "x",
+                                    index: None
+                                })),
+                                lhs_type: None,
+                            })
+                        ],
+                        result: ast::Expr::Var(ast::VarExpr {
+                            ident: "y",
+                            index: None
+                        }),
+                    }
+                ))
+            );
+        }
+
+        for s in ["{x = 42; y = x;}", "{ x = 42 ; y = x; }"] {
             assert_eq!(
                 super::block(s),
                 Ok((
@@ -706,10 +833,6 @@ mod tests {
                                 lhs_type: None,
                             })
                         ],
-                        result: ast::Expr::Var(ast::VarExpr {
-                            ident: "y",
-                            index: None
-                        }),
                     }
                 ))
             );
@@ -761,7 +884,7 @@ mod tests {
                 ast::Def::Func(Rc::new(ast::FunctionDef {
                     name: "one",
                     param: vec![],
-                    body: ast::Block {
+                    body: ast::BlockExpr {
                         stmts: vec![],
                         result: ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from(1)
@@ -788,7 +911,7 @@ mod tests {
                             persist: false
                         }
                     ],
-                    body: ast::Block {
+                    body: ast::BlockExpr {
                         stmts: vec![],
                         result: ast::Expr::Int(ast::IntExpr {
                             value: BigInt::from(1)
@@ -815,7 +938,7 @@ mod tests {
                             persist: true
                         }
                     ],
-                    body: ast::Block {
+                    body: ast::BlockExpr {
                         stmts: vec![],
                         result: ast::Expr::Binary(ast::BinaryExpr {
                             op: '+',

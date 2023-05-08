@@ -49,7 +49,7 @@ impl Expression for IntExpr {}
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarExpr<'a> {
     pub ident: &'a str,
-    pub index: Option<usize>,
+    pub index: Option<Rc<Expr<'a>>>,
 }
 
 impl Expression for VarExpr<'_> {}
@@ -111,21 +111,38 @@ pub struct AssignmentStmt<'a> {
 impl Statement for AssignmentStmt<'_> {}
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct ForStmt<'a> {
+    pub variable: VarExpr<'a>,
+    pub count: IntExpr,
+    pub body: Block<'a>,
+}
+
+impl Statement for ForStmt<'_> {}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Stmt<'a> {
     Assign(AssignmentStmt<'a>),
+    For(ForStmt<'a>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct BlockExpr<'a> {
+    pub stmts: Vec<Stmt<'a>>,
+    pub result: Expr<'a>,
+}
+
+impl Expression for BlockExpr<'_> {}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct Block<'a> {
-    pub(crate) stmts: Vec<Stmt<'a>>,
-    pub(crate) result: Expr<'a>,
+    pub stmts: Vec<Stmt<'a>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDef<'a> {
     pub name: &'a str,
     pub param: Vec<TypedParameter<'a>>,
-    pub body: Block<'a>,
+    pub body: BlockExpr<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
